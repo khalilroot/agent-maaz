@@ -90,6 +90,38 @@ TOOLS: list[dict] = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "wikipedia_search",
+            "description": "Search Wikipedia for articles on a topic. Returns up to 5 matching titles with short snippets. Use for general factual knowledge (history, science, biography, geography). Free, no API key needed.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Topic to search for in natural language."},
+                    "lang": {"type": "string", "default": "en", "description": "Two-letter Wikipedia language code (en, ar, fr, de, es, it, pt, ru, zh, ja, ko)."},
+                    "limit": {"type": "integer", "default": 5, "description": "Max results (1-10)."},
+                },
+                "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "wikipedia_summary",
+            "description": "Fetch the introductory summary of a specific Wikipedia article by its exact title. Returns a 5-sentence plain-text excerpt.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string", "description": "Exact article title (use wikipedia_search first to find it)."},
+                    "lang": {"type": "string", "default": "en", "description": "Wikipedia language code."},
+                    "sentences": {"type": "integer", "default": 5, "description": "Number of sentences (1-20)."},
+                },
+                "required": ["title"],
+            },
+        },
+    },
 ]
 
 
@@ -115,6 +147,22 @@ def execute_tool(name: str, args: dict) -> str:
     if name == "get_current_time":
         from apps.tools import clock
         return json.dumps(clock.now(args.get("timezone", "UTC")), ensure_ascii=False)
+    if name == "wikipedia_search":
+        from apps.tools import wikipedia
+        results = wikipedia.search(
+            args["query"],
+            lang=args.get("lang", "en"),
+            limit=args.get("limit", 5),
+        )
+        return json.dumps(results, ensure_ascii=False)
+    if name == "wikipedia_summary":
+        from apps.tools import wikipedia
+        result = wikipedia.summary(
+            args["title"],
+            lang=args.get("lang", "en"),
+            sentences=args.get("sentences", 5),
+        )
+        return json.dumps(result, ensure_ascii=False)
     return json.dumps({"error": f"unknown tool: {name}"})
 
 
