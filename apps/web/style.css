@@ -62,6 +62,9 @@ header {
 }
 .actions button:hover { background: var(--bg-input); }
 .actions button.active { background: var(--accent); color: #0f1115; border-color: var(--accent); }
+#mic.recording { color: #ff6b6b; animation: pulse 1s infinite; }
+@keyframes pulse { 50% { opacity: 0.4; } }
+#mic:disabled { opacity: 0.3; cursor: not-allowed; }
 
 #messages {
   flex: 1;

@@ -93,6 +93,37 @@ toolsBtn.addEventListener("click", () => {
   toolsBtn.textContent = `⚙ tools: ${state.toolsOn ? "on" : "off"}`;
 });
 
+const micBtn = document.getElementById("mic");
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+let recognition = null;
+if (SpeechRecognition) {
+  recognition = new SpeechRecognition();
+  recognition.lang = "ar-EG";
+  recognition.interimResults = false;
+  recognition.continuous = false;
+  recognition.onresult = (e) => {
+    const text = e.results[0][0].transcript;
+    inputEl.value = text;
+    inputEl.focus();
+    micBtn.classList.remove("recording");
+    inputEl.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
+  };
+  recognition.onerror = () => micBtn.classList.remove("recording");
+  recognition.onend = () => micBtn.classList.remove("recording");
+  micBtn.addEventListener("click", () => {
+    if (micBtn.classList.contains("recording")) {
+      recognition.stop();
+      micBtn.classList.remove("recording");
+    } else {
+      micBtn.classList.add("recording");
+      recognition.start();
+    }
+  });
+} else {
+  micBtn.disabled = true;
+  micBtn.title = "browser doesn't support Web Speech API";
+}
+
 inputEl.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) {
     e.preventDefault();
