@@ -4,13 +4,22 @@ import sys
 from pathlib import Path
 
 from fastapi import FastAPI
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from apps.core import memory, router  # noqa: E402
 
+WEB_DIR = Path(__file__).resolve().parents[2] / "apps" / "web"
+
 app = FastAPI(title="agent-maaz")
+app.mount("/static", StaticFiles(directory=str(WEB_DIR)), name="static")
+
+
+@app.get("/")
+def index() -> FileResponse:
+    return FileResponse(str(WEB_DIR / "index.html"))
 
 
 class ChatRequest(BaseModel):

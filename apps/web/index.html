@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>agent-maaz</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="brand">
+      <span class="dot"></span>
+      <h1>agent-maaz</h1>
+      <span class="sub">free · open source · <span id="model">checking…</span></span>
+    </div>
+    <div class="actions">
+      <button id="new-chat" title="new conversation">+ new</button>
+      <button id="toggle-tools" title="toggle autonomous tools">⚙ tools: on</button>
+    </div>
+  </header>
+  <main id="messages" aria-live="polite"></main>
+  <footer>
+    <textarea id="input" rows="1" placeholder="اكتب رسالتك… (Enter للإرسال، Shift+Enter لسطر جديد)" autofocus></textarea>
+  </footer>
+</div>
+<script src="/static/app.js"></script>
+</body>
+</html>
