@@ -40,7 +40,9 @@ def chat_stream(req: ChatRequest) -> StreamingResponse:
         for chunk in router.chat_stream(sid, req.message, model=req.model):
             yield chunk
 
-    return StreamingResponse(gen(), media_type="text/plain")
+    response = StreamingResponse(gen(), media_type="text/plain")
+    response.headers["X-Session-Id"] = sid
+    return response
 
 
 @app.get("/sessions")
