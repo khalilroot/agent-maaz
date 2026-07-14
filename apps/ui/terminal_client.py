@@ -63,3 +63,16 @@ class AgentMaazClient:
         r = await self.client.get("/search", params={"q": query, "max_results": max_results})
         r.raise_for_status()
         return r.json().get("results", [])
+
+    async def chat_tools(self, message: str) -> dict:
+        payload: dict = {"message": message}
+        if self.sid:
+            payload["sid"] = self.sid
+        elif self.system:
+            payload["system"] = self.system
+        r = await self.client.post("/chat/tools", json=payload)
+        r.raise_for_status()
+        data = r.json()
+        if data.get("sid") and not self.sid:
+            self.sid = data["sid"]
+        return data

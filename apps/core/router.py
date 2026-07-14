@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import sys
 import uuid
@@ -23,6 +24,49 @@ FALLBACK_CHAIN: list[str] = [
     "nousresearch/hermes-3-llama-3.1-405b:free",
     "google/gemma-4-31b-it:free",
 ]
+
+TOOLS: list[dict] = [
+    {
+        "type": "function",
+        "function": {
+            "name": "browser_search",
+            "description": "Search the web using DuckDuckGo. Use for up-to-date info, facts, or any knowledge you are unsure about.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "The search query in natural language."},
+                    "max_results": {"type": "integer", "default": 5, "description": "Maximum number of results (1-20)."},
+                },
+                "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "browser_fetch",
+            "description": "Fetch a URL and return its plain-text content. Use to read articles or pages found via search.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {"type": "string", "description": "Absolute URL to fetch."},
+                    "max_length": {"type": "integer", "default": 5000, "description": "Max characters to return."},
+                },
+                "required": ["url"],
+            },
+        },
+    },
+]
+
+
+def execute_tool(name: str, args: dict) -> str:
+    from apps.tools import browser
+    if name == "browser_search":
+        results = browser.search(args["query"], args.get("max_results", 5))
+        return json.dumps(results, ensure_ascii=False)
+    if name == "browser_fetch":
+        return browser.fetch(args["url"], args.get("max_length", 5000))
+    return json.dumps({"error": f"unknown tool: {name}"})
 
 
 def get_client() -> OpenAI:
@@ -56,20 +100,19 @@ def get_session(sid: str) -> list[dict]:
     return SESSIONS[sid]
 
 
-def _call_model(client: OpenAI, model: str, messages: list[dict], stream: bool):
-    return client.chat.completions.create(
-        model=model,
-        messages=messages,
-        stream=stream,
-    )
+def _call_model(client: OpenAI, model: str, messages: list[dict], stream: bool, tools: list[dict] | None = None):
+    kwargs = {"model": model, "messages": messages, "stream": stream}
+    if tools:
+        kwargs["tools"] = tools
+        kwargs["tool_choice"] = "auto"
+    return client.chat.completions.create(**kwargs)
 
 
 def _resolve_models(model: str | None) -> list[str]:
     if model:
         return [model]
     primary = get_primary_model()
-    chain = [primary] + [m for m in FALLBACK_CHAIN if m != primary]
-    return chain
+    return [primary] + [m for m in FALLBACK_CHAIN if m != primary]
 
 
 def chat(sid: str, user_message: str, model: str | None = None) -> str:
@@ -112,6 +155,88 @@ def chat_stream(sid: str, user_message: str, model: str | None = None) -> Genera
         except Exception as e:
             last_err = e
             continue
+    raise RuntimeError(f"all fallback models failed, last error: {last_err}")
+
+
+def chat_with_tools(
+    sid: str,
+    user_message: str,
+    model: str | None = None,
+    max_iterations: int = 5,
+) -> tuple[str, list[dict]]:
+    """LLM-driven tool use. Returns (final_reply, tool_call_log).
+
+    The LLM decides when to call browser_search / browser_fetch. Loop until
+    the model returns plain text (no tool_calls), the iteration cap, or all
+    fallback models fail.
+    """
+    client = get_client()
+    messages = get_session(sid)
+    messages.append({"role": "user", "content": user_message})
+    memory.save_message(sid, "user", user_message)
+
+    working = list(messages)
+    log: list[dict] = []
+    last_err: Exception | None = None
+
+    for model_name in _resolve_models(model):
+        try:
+            for _ in range(max_iterations):
+                response = _call_model(
+                    client, model_name, working, stream=False, tools=TOOLS
+                )
+                msg = response.choices[0].message
+                tool_calls = getattr(msg, "tool_calls", None)
+                if not tool_calls:
+                    reply = msg.content or ""
+                    working.append({"role": "assistant", "content": reply})
+                    messages.append({"role": "assistant", "content": reply})
+                    memory.save_message(sid, "assistant", reply)
+                    return reply, log
+
+                assistant_msg = {
+                    "role": "assistant",
+                    "content": msg.content or "",
+                    "tool_calls": [
+                        {
+                            "id": tc.id,
+                            "type": "function",
+                            "function": {
+                                "name": tc.function.name,
+                                "arguments": tc.function.arguments,
+                            },
+                        }
+                        for tc in tool_calls
+                    ],
+                }
+                working.append(assistant_msg)
+                messages.append(assistant_msg)
+
+                for tc in tool_calls:
+                    args = json.loads(tc.function.arguments or "{}")
+                    result = execute_tool(tc.function.name, args)
+                    tool_msg = {
+                        "role": "tool",
+                        "tool_call_id": tc.id,
+                        "content": result,
+                    }
+                    working.append(tool_msg)
+                    messages.append(tool_msg)
+                    log.append({
+                        "tool": tc.function.name,
+                        "args": args,
+                        "result_excerpt": result[:200],
+                    })
+
+            reply = "tool iteration cap reached without final text"
+            working.append({"role": "assistant", "content": reply})
+            messages.append({"role": "assistant", "content": reply})
+            memory.save_message(sid, "assistant", reply)
+            return reply, log
+        except Exception as e:
+            last_err = e
+            continue
+
     raise RuntimeError(f"all fallback models failed, last error: {last_err}")
 
 

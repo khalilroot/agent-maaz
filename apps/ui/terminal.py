@@ -61,6 +61,14 @@ class AgentMaazTUI(App):
                 for r in results[:5]:
                     log.write(f"  [link={r['url']}][cyan]{r['title'][:80]}[/][/]")
                 return
+            if text.startswith("/agent "):
+                prompt = text[len("/agent "):]
+                log.write(f"[bold cyan]agent-maaz (with tools)>[/] ", end="")
+                data = await self.agent.chat_tools(prompt)
+                for entry in data.get("tool_log", []):
+                    log.write(f"\n[dim]  ⚙ {entry['tool']}({list(entry['args'].keys())}) -> {entry['result_excerpt'][:80]}[/]")
+                log.write(f"\n[bold cyan]answer>[/] {data['reply']}")
+                return
             log.write("[bold cyan]agent-maaz>[/] ", end="")
             reply = await self.agent.chat_stream(text)
             log.write(reply)

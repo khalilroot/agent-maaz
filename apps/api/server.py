@@ -20,6 +20,14 @@ class ChatRequest(BaseModel):
     system: str | None = None
 
 
+class ToolsChatRequest(BaseModel):
+    sid: str | None = None
+    message: str
+    model: str | None = None
+    system: str | None = None
+    max_iterations: int = 5
+
+
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok"}
@@ -43,6 +51,26 @@ def chat_stream(req: ChatRequest) -> StreamingResponse:
     response = StreamingResponse(gen(), media_type="text/plain")
     response.headers["X-Session-Id"] = sid
     return response
+
+
+@app.post("/chat/tools")
+def chat_tools(req: ToolsChatRequest) -> dict:
+    """LLM-driven tool use. Returns final answer + log of tool calls made."""
+    sid = req.sid
+    if not sid:
+        sid = router.new_session(system=req.system)
+    elif router.get_session(sid)[0].get("role") != "system" and req.system:
+        router.get_session(sid).insert(0, {"role": "system", "content": req.system})
+    reply, tool_log = router.chat_with_tools(
+        sid, req.message, model=req.model, max_iterations=req.max_iterations
+    )
+    return {"sid": sid, "reply": reply, "tool_log": tool_log}
+
+
+@app.get("/tools")
+def list_tools() -> dict:
+    """List tools registered for LLM-driven use."""
+    return {"tools": router.TOOLS}
 
 
 @app.get("/sessions")
