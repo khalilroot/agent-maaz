@@ -1,0 +1,24 @@
+[project]
+name = "agent-maaz"
+version = "0.1.0"
+description = "Free open-source AI agent. $0 recurring cost, multi-layer LLM fallback, web + terminal UI."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [
+    { name = "Khalil", email = "msk161999@gmail.com" }
+]
+
+dependencies = [
+    "openai>=1.50.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "ruff>=0.6.0",
+]
+
+[tool.setuptools.packages.find]
+include = ["apps*"]
