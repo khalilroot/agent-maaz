@@ -16,6 +16,14 @@ load_dotenv(Path(__file__).resolve().parents[2] / ".env", override=True)
 
 SESSIONS: dict[str, list[dict]] = {}
 
+FALLBACK_CHAIN: list[str] = [
+    "nvidia/nemotron-3-ultra-550b-a55b:free",
+    "meta-llama/llama-3.3-70b-instruct:free",
+    "qwen/qwen3-coder:free",
+    "nousresearch/hermes-3-llama-3.1-405b:free",
+    "google/gemma-4-31b-it:free",
+]
+
 
 def get_client() -> OpenAI:
     api_key = os.getenv("OPENROUTER_API_KEY")
@@ -30,7 +38,7 @@ def get_client() -> OpenAI:
 def get_primary_model() -> str:
     return os.getenv(
         "AGENT_MAAZ_PRIMARY_MODEL",
-        "nvidia/nemotron-3-ultra-550b-a55b:free",
+        FALLBACK_CHAIN[0],
     )
 
 
@@ -48,19 +56,39 @@ def get_session(sid: str) -> list[dict]:
     return SESSIONS[sid]
 
 
+def _call_model(client: OpenAI, model: str, messages: list[dict], stream: bool):
+    return client.chat.completions.create(
+        model=model,
+        messages=messages,
+        stream=stream,
+    )
+
+
+def _resolve_models(model: str | None) -> list[str]:
+    if model:
+        return [model]
+    primary = get_primary_model()
+    chain = [primary] + [m for m in FALLBACK_CHAIN if m != primary]
+    return chain
+
+
 def chat(sid: str, user_message: str, model: str | None = None) -> str:
     client = get_client()
     messages = get_session(sid)
     messages.append({"role": "user", "content": user_message})
     memory.save_message(sid, "user", user_message)
-    response = client.chat.completions.create(
-        model=model or get_primary_model(),
-        messages=messages,
-    )
-    reply = response.choices[0].message.content or ""
-    messages.append({"role": "assistant", "content": reply})
-    memory.save_message(sid, "assistant", reply)
-    return reply
+    last_err: Exception | None = None
+    for m in _resolve_models(model):
+        try:
+            response = _call_model(client, m, messages, stream=False)
+            reply = response.choices[0].message.content or ""
+            messages.append({"role": "assistant", "content": reply})
+            memory.save_message(sid, "assistant", reply)
+            return reply
+        except Exception as e:
+            last_err = e
+            continue
+    raise RuntimeError(f"all fallback models failed, last error: {last_err}")
 
 
 def chat_stream(sid: str, user_message: str, model: str | None = None) -> Generator[str, None, None]:
@@ -68,19 +96,23 @@ def chat_stream(sid: str, user_message: str, model: str | None = None) -> Genera
     messages = get_session(sid)
     messages.append({"role": "user", "content": user_message})
     memory.save_message(sid, "user", user_message)
-    stream = client.chat.completions.create(
-        model=model or get_primary_model(),
-        messages=messages,
-        stream=True,
-    )
-    full_reply = ""
-    for chunk in stream:
-        delta = chunk.choices[0].delta.content if chunk.choices else None
-        if delta:
-            full_reply += delta
-            yield delta
-    messages.append({"role": "assistant", "content": full_reply})
-    memory.save_message(sid, "assistant", full_reply)
+    last_err: Exception | None = None
+    for m in _resolve_models(model):
+        try:
+            stream = _call_model(client, m, messages, stream=True)
+            full_reply = ""
+            for chunk in stream:
+                delta = chunk.choices[0].delta.content if chunk.choices else None
+                if delta:
+                    full_reply += delta
+                    yield delta
+            messages.append({"role": "assistant", "content": full_reply})
+            memory.save_message(sid, "assistant", full_reply)
+            return
+        except Exception as e:
+            last_err = e
+            continue
+    raise RuntimeError(f"all fallback models failed, last error: {last_err}")
 
 
 def reset_session(sid: str) -> None:
