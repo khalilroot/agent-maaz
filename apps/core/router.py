@@ -1,23 +1,19 @@
-"""LLM router for agent-maaz.
-
-Uses OpenRouter free tier as primary (verified model: deepseek-chat-v3.1:free).
-
-Verified 2026-07-14: key works, model responds in Arabic, fits within free tier limits.
-"""
 from __future__ import annotations
 
 import os
+import uuid
 from pathlib import Path
+from typing import Generator
 
 from dotenv import load_dotenv
 from openai import OpenAI
 
-# Load .env once at module import so every function sees the same authoritative config.
 load_dotenv(Path(__file__).resolve().parents[2] / ".env", override=True)
+
+SESSIONS: dict[str, list[dict]] = {}
 
 
 def get_client() -> OpenAI:
-    """Build OpenAI-compatible client pointing at OpenRouter."""
     api_key = os.getenv("OPENROUTER_API_KEY")
     if not api_key:
         raise RuntimeError("OPENROUTER_API_KEY missing in .env")
@@ -28,23 +24,76 @@ def get_client() -> OpenAI:
 
 
 def get_primary_model() -> str:
-    return os.getenv("AGENT_MAAZ_PRIMARY_MODEL", "deepseek/deepseek-chat-v3.1:free")
-
-
-def chat(message: str) -> str:
-    """Single-turn chat. Returns assistant text."""
-    client = get_client()
-    response = client.chat.completions.create(
-        model=get_primary_model(),
-        messages=[{"role": "user", "content": message}],
+    return os.getenv(
+        "AGENT_MAAZ_PRIMARY_MODEL",
+        "nvidia/nemotron-3-ultra-550b-a55b:free",
     )
-    return response.choices[0].message.content or ""
+
+
+def new_session(system: str | None = None) -> str:
+    sid = str(uuid.uuid4())
+    SESSIONS[sid] = []
+    if system:
+        SESSIONS[sid].append({"role": "system", "content": system})
+    return sid
+
+
+def get_session(sid: str) -> list[dict]:
+    if sid not in SESSIONS:
+        raise KeyError(f"session {sid} not found")
+    return SESSIONS[sid]
+
+
+def chat(sid: str, user_message: str, model: str | None = None) -> str:
+    client = get_client()
+    messages = get_session(sid)
+    messages.append({"role": "user", "content": user_message})
+    response = client.chat.completions.create(
+        model=model or get_primary_model(),
+        messages=messages,
+    )
+    reply = response.choices[0].message.content or ""
+    messages.append({"role": "assistant", "content": reply})
+    return reply
+
+
+def chat_stream(sid: str, user_message: str, model: str | None = None) -> Generator[str, None, None]:
+    client = get_client()
+    messages = get_session(sid)
+    messages.append({"role": "user", "content": user_message})
+    stream = client.chat.completions.create(
+        model=model or get_primary_model(),
+        messages=messages,
+        stream=True,
+    )
+    full_reply = ""
+    for chunk in stream:
+        delta = chunk.choices[0].delta.content if chunk.choices else None
+        if delta:
+            full_reply += delta
+            yield delta
+    messages.append({"role": "assistant", "content": full_reply})
+
+
+def reset_session(sid: str) -> None:
+    SESSIONS.pop(sid, None)
 
 
 if __name__ == "__main__":
-    print("--- agent-maaz router smoke test ---")
-    print(f"primary model: {get_primary_model()}")
-    print("--- sending: قول لي مرحبا بالعربي ---")
-    result = chat("قول لي مرحبا بالعربي في جملة واحدة")
-    print("--- response ---")
-    print(result)
+    print("--- multi-turn + stream test ---")
+    sid = new_session(
+        system="انت مساعد ذكي اسمه agent-maaz. بترد بالعربي. خلي ردك قصير ومباشر."
+    )
+    prompts = [
+        "اسمي محمود.",
+        "ممكن تساعدني بالكود؟",
+        "فاكرة اسمي ايه؟",
+    ]
+    for prompt in prompts:
+        print(f"\nUser: {prompt}")
+        print("agent-maaz: ", end="", flush=True)
+        for chunk in chat_stream(sid, prompt):
+            print(chunk, end="", flush=True)
+        print()
+    session = get_session(sid)
+    print(f"\n--- session {sid[:8]} kept {len(session)} messages in history ---")
