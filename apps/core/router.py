@@ -56,16 +56,65 @@ TOOLS: list[dict] = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "calculator",
+            "description": "Evaluate a math expression and return the numeric result. Use this for any arithmetic or scientific computation (LLMs are unreliable at multi-step math).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "expression": {
+                        "type": "string",
+                        "description": "Math expression to evaluate. Supports +,-,*,/,**,%, parentheses, and constants/functions: pi,e,tau,inf,nan,sqrt,sin,cos,tan,log,log10,log2,exp,abs,round,ceil,floor,min,max.",
+                    }
+                },
+                "required": ["expression"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_current_time",
+            "description": "Get the current date and time in ISO 8601 format, with optional timezone. Use when the user asks 'what time is it' or 'what's today's date' — LLMs often have wrong or stale dates.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "timezone": {
+                        "type": "string",
+                        "default": "UTC",
+                        "description": "IANA timezone name (e.g. 'Africa/Cairo', 'America/New_York', 'UTC').",
+                    }
+                },
+            },
+        },
+    },
 ]
 
 
 def execute_tool(name: str, args: dict) -> str:
-    from apps.tools import browser
     if name == "browser_search":
+        from apps.tools import browser
         results = browser.search(args["query"], args.get("max_results", 5))
         return json.dumps(results, ensure_ascii=False)
     if name == "browser_fetch":
+        from apps.tools import browser
         return browser.fetch(args["url"], args.get("max_length", 5000))
+    if name == "calculator":
+        from apps.tools import calculator
+        try:
+            value = calculator.safe_eval(args["expression"])
+            if isinstance(value, float):
+                text = repr(value)
+            else:
+                text = str(value)
+            return json.dumps({"result": text}, ensure_ascii=False)
+        except calculator.CalculatorError as e:
+            return json.dumps({"error": str(e)}, ensure_ascii=False)
+    if name == "get_current_time":
+        from apps.tools import clock
+        return json.dumps(clock.now(args.get("timezone", "UTC")), ensure_ascii=False)
     return json.dumps({"error": f"unknown tool: {name}"})
 
 
