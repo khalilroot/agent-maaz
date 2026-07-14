@@ -39,3 +39,26 @@ def fake_openai_key(monkeypatch):
     monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-v1-test-fake-key-for-tests-only")
     monkeypatch.setenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
     monkeypatch.setenv("AGENT_MAAZ_PRIMARY_MODEL", "test/primary:free")
+
+
+@pytest.fixture
+def test_client_factory(monkeypatch):
+    """Returns a builder that reloads the FastAPI app for auth tests."""
+
+    def _build(require_auth: bool, token: str = ""):
+        if require_auth:
+            monkeypatch.setenv("REQUIRE_AUTH", "true")
+            if token:
+                monkeypatch.setenv("AGENT_MAAZ_BEARER_TOKEN", token)
+        else:
+            monkeypatch.delenv("REQUIRE_AUTH", raising=False)
+            monkeypatch.delenv("AGENT_MAAZ_BEARER_TOKEN", raising=False)
+        import sys
+        for mod in ("apps.api.server", "apps.api.auth"):
+            if mod in sys.modules:
+                del sys.modules[mod]
+        from apps.api import server
+        server.router.SESSIONS.clear()
+        return server.app
+
+    return _build

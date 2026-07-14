@@ -3,17 +3,32 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from fastapi import FastAPI
-from fastapi.responses import StreamingResponse, FileResponse
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse, StreamingResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from apps.core import documents, memory, router  # noqa: E402
+from apps.api import auth  # noqa: E402
 
 WEB_DIR = Path(__file__).resolve().parents[2] / "apps" / "web"
 
 app = FastAPI(title="agent-maaz")
+
+
+@app.middleware("http")
+async def auth_middleware(request: Request, call_next):
+    if request.url.path in ("/health", "/"):
+        return await call_next(request)
+    if not auth.check(request.headers.get("authorization")):
+        return JSONResponse(
+            status_code=401,
+            content={"detail": auth.error_message()},
+        )
+    return await call_next(request)
+
+
 app.mount("/static", StaticFiles(directory=str(WEB_DIR)), name="static")
 
 
@@ -55,7 +70,7 @@ class RagChatRequest(BaseModel):
 
 @app.get("/health")
 def health() -> dict:
-    return {"status": "ok"}
+    return {"status": "ok", "auth_enabled": auth.is_enabled()}
 
 
 @app.post("/chat")

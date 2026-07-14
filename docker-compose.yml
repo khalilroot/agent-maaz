@@ -1,0 +1,15 @@
+services:
+  agent-maaz:
+    build: .
+    container_name: agent-maaz
+    ports:
+      - "8000:8000"
+    environment:
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:?set OPENROUTER_API_KEY in .env}
+      OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
+      AGENT_MAAZ_PRIMARY_MODEL: ${AGENT_MAAZ_PRIMARY_MODEL:-nvidia/nemotron-3-ultra-550b-a55b:free}
+      REQUIRE_AUTH: ${REQUIRE_AUTH:-false}
+      AGENT_MAAZ_BEARER_TOKEN: ${AGENT_MAAZ_BEARER_TOKEN:-}
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped

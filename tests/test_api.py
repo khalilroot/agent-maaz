@@ -38,7 +38,8 @@ def client(mock_router_chat):
 def test_health_returns_ok(client):
     r = client.get("/health")
     assert r.status_code == 200
-    assert r.json() == {"status": "ok"}
+    data = r.json()
+    assert data["status"] == "ok"
 
 
 def test_chat_returns_sid_and_reply(client):

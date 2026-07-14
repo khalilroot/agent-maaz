@@ -1,0 +1,32 @@
+.git
+.venv
+venv
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+.coverage
+htmlcov
+.mypy_cache
+.ruff_cache
+
+.env
+.env.local
+.env.*.local
+!.env.example
+
+data/
+*.db
+*.sqlite
+
+.idea/
+.vscode/
+.DS_Store
+
+# tests still run on host, exclude from image
+tests/
+
+# Not needed in container
+README.md
+AGENTS.md
+*.md
