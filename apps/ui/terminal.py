@@ -70,8 +70,8 @@ class AgentMaazTUI(App):
                 log.write(f"\n[bold cyan]answer>[/] {data['reply']}")
                 return
             log.write("[bold cyan]agent-maaz>[/] ", end="")
-            reply = await self.agent.chat_stream(text)
-            log.write(reply)
+            async for chunk in self.agent.chat_stream_iter(text):
+                log.write(chunk, end="")
             log.write("")
         except Exception as e:
             log.write(f"\n[red]error: {e}[/]")

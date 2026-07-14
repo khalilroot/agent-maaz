@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import AsyncIterator
 
 import httpx
 
@@ -31,28 +32,32 @@ class AgentMaazClient:
         r.raise_for_status()
         return r.json()
 
-    async def chat_stream(self, message: str) -> str:
+    def _chat_payload(self, message: str) -> dict:
         payload: dict = {"message": message}
         if self.sid:
             payload["sid"] = self.sid
         elif self.system:
             payload["system"] = self.system
+        return payload
+
+    async def chat_stream(self, message: str) -> str:
         chunks: list[str] = []
+        async for chunk in self.chat_stream_iter(message):
+            chunks.append(chunk)
+        return "".join(chunks)
+
+    async def chat_stream_iter(self, message: str) -> AsyncIterator[str]:
+        payload = self._chat_payload(message)
         async with self.client.stream("POST", "/chat/stream", json=payload) as resp:
             new_sid = resp.headers.get("x-session-id")
             if new_sid and not self.sid:
                 self.sid = new_sid
             async for chunk in resp.aiter_text():
-                chunks.append(chunk)
-        return "".join(chunks)
+                if chunk:
+                    yield chunk
 
     async def chat(self, message: str) -> str:
-        payload: dict = {"message": message}
-        if self.sid:
-            payload["sid"] = self.sid
-        elif self.system:
-            payload["system"] = self.system
-        r = await self.client.post("/chat", json=payload)
+        r = await self.client.post("/chat", json=self._chat_payload(message))
         r.raise_for_status()
         data = r.json()
         if data.get("sid") and not self.sid:
@@ -65,12 +70,7 @@ class AgentMaazClient:
         return r.json().get("results", [])
 
     async def chat_tools(self, message: str) -> dict:
-        payload: dict = {"message": message}
-        if self.sid:
-            payload["sid"] = self.sid
-        elif self.system:
-            payload["system"] = self.system
-        r = await self.client.post("/chat/tools", json=payload)
+        r = await self.client.post("/chat/tools", json=self._chat_payload(message))
         r.raise_for_status()
         data = r.json()
         if data.get("sid") and not self.sid:
