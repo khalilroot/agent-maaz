@@ -1,0 +1,42 @@
+name: backup-conversations
+
+on:
+  schedule:
+    - cron: "0 4 * * *"  # daily at 04:00 UTC
+  workflow_dispatch:
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install agent-maaz
+        run: |
+          pip install -e ".[dev]"
+
+      - name: Run conversation summary (count only — no LLM call)
+        run: |
+          python - <<'PY'
+          import sqlite3, json, os
+          from pathlib import Path
+          db_path = Path("data/agent-maaz.db")
+          doc_db = Path("data/documents.db")
+          for p in (db_path, doc_db):
+              if p.exists():
+                  rows = list(sqlite3.connect(p).execute("SELECT name FROM sqlite_master WHERE type='table'"))
+                  print(f"{p}: {len(rows)} tables")
+              else:
+                  print(f"{p}: missing")
+          PY
+
+      - name: Note in summary (manual step still required)
+        run: |
+          echo "::warning::Convex auto-backup is a stub — real backup requires encrypted upload to a host you control."
+          echo "For now: data/ is gitignored. To back up conversations, copy data/*.db to a safe location manually."
