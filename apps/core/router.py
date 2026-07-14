@@ -390,6 +390,97 @@ def reset_session(sid: str) -> None:
     SESSIONS.pop(sid, None)
 
 
+def _parse_plan(text: str, max_steps: int) -> list[str]:
+    """Extract a numbered list of steps from the LLM's plan output."""
+    import re as _re
+
+    steps: list[str] = []
+    pattern = _re.compile(
+        r"^\s*(?:step\s*)?\d+[\.\)\:\-]?\s*[:\-\.\)]?\s*(.+)$",
+        _re.IGNORECASE,
+    )
+    for line in text.splitlines():
+        s = line.strip()
+        if not s:
+            continue
+        m = pattern.match(s)
+        if not m:
+            continue
+        body = m.group(1).strip()
+        body = _re.sub(r"^[\.\)\:\-]+\s*", "", body)
+        if body:
+            steps.append(body[:500])
+        if len(steps) >= max_steps:
+            break
+    return steps
+
+
+def chat_with_plan(
+    sid: str,
+    task: str,
+    model: str | None = None,
+    max_steps: int = 6,
+) -> tuple[str, str, list[dict]]:
+    """Plan-and-Execute: model writes a numbered plan, each step is executed
+    with chat_with_tools. Returns (plan_text, final_answer, per_step_logs).
+    Falls back to a single-pass if planning or any step fails.
+    """
+    if not SESSIONS.get(sid):
+        new_session(system="انت مساعد ذكي اسمه agent-maaz. بترد بالعربي.")
+
+    plan_prompt = (
+        "اكتب خطة مختصرة مرقّمة (1، 2، 3...) للإجابة على الطلب التالي.\n"
+        "كل خطوة جملة واحدة قصيرة. لا تكتب شرح.\n\n"
+        f"الطلب: {task}"
+    )
+    plan_text = ""
+    plan_steps: list[str] = []
+    try:
+        plan_text = chat(sid, plan_prompt, model=model)
+        plan_steps = _parse_plan(plan_text, max_steps=max_steps)
+    except Exception:
+        plan_steps = []
+
+    if not plan_steps:
+        answer, log = chat_with_tools(sid, task, model=model, max_iterations=max_steps)
+        return plan_text or "(plan not generated)", answer, [{"step": 0, "log": log}]
+
+    step_logs: list[dict] = []
+    final_answer = ""
+    for idx, step in enumerate(plan_steps, start=1):
+        step_prompt = (
+            f"الخطوة {idx} من الخطة: {step}\n\n"
+            f"نفّذ هذه الخطوة للإجابة على الطلب الأصلي: {task}\n"
+            "استخدم أي أداة متاحة لو احتجت. "
+            "ردّ بجملة أو جملتين تصف ما توصّلت إليه فقط."
+        )
+        try:
+            step_reply, step_log = chat_with_tools(
+                sid, step_prompt, model=model, max_iterations=2
+            )
+            step_logs.append({"step": idx, "instruction": step, "result": step_reply, "log": step_log})
+            final_answer = step_reply if step_reply else final_answer
+        except Exception as e:
+            step_logs.append({"step": idx, "instruction": step, "error": str(e)})
+
+    synth_prompt = (
+        f"بناءً على تنفيذك للخطة السابقة، أعطني الإجابة النهائية الكاملة على الطلب الأصلي:\n"
+        f"{task}\n\n"
+        f"خطوات التنفيذ:\n"
+        + "\n".join(f"- {s.get('result', s.get('error', ''))}" for s in step_logs)
+        + "\n\nأعطني الإجابة النهائية فقط، بدون شرح."
+    )
+    try:
+        final_answer, _ = chat_with_tools(sid, synth_prompt, model=model, max_iterations=2)
+    except Exception:
+        pass
+
+    return plan_text, final_answer, step_logs
+
+
+
+
+
 if __name__ == "__main__":
     print("--- multi-turn + stream test ---")
     sid = new_session(

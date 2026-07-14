@@ -80,6 +80,14 @@ class RagChatRequest(BaseModel):
     top_k: int = 3
 
 
+class PlanChatRequest(BaseModel):
+    sid: str | None = None
+    task: str
+    model: str | None = None
+    system: str | None = None
+    max_steps: int = 6
+
+
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok", "auth_enabled": auth.is_enabled()}
@@ -125,6 +133,24 @@ def list_tools() -> dict:
     return {"tools": router.TOOLS}
 
 
+@app.get("/skills")
+def list_skills() -> dict:
+    """List available Skills (Anthropic-style: modular instruction files)."""
+    from apps import skills as skills_mod
+    return {
+        "skills": [
+            {
+                "name": s.name,
+                "description": s.description,
+                "when_to_use": s.when_to_use,
+                "triggers": list(s.triggers),
+                "body_chars": len(s.body),
+            }
+            for s in skills_mod.list_skills()
+        ]
+    }
+
+
 @app.post("/chat/rag")
 def chat_rag(req: RagChatRequest) -> dict:
     """RAG-augmented chat: searches local documents before LLM call."""
@@ -146,6 +172,27 @@ def chat_rag(req: RagChatRequest) -> dict:
         "reply": reply,
         "tool_log": tool_log,
         "rag_context_chars": len(rag_context),
+    }
+
+
+@app.post("/chat/plan")
+def chat_plan(req: PlanChatRequest) -> dict:
+    """Plan-and-Execute: agent writes a numbered plan, executes each step
+    via tools, then synthesizes a final answer. Falls back to single-pass
+    if planning fails."""
+    sid = req.sid
+    if not sid:
+        sid = router.new_session(system=req.system)
+    elif router.get_session(sid)[0].get("role") != "system" and req.system:
+        router.get_session(sid).insert(0, {"role": "system", "content": req.system})
+    plan, final, steps = router.chat_with_plan(
+        sid, req.task, model=req.model, max_steps=req.max_steps
+    )
+    return {
+        "sid": sid,
+        "plan": plan,
+        "reply": final,
+        "steps": steps,
     }
 
 
