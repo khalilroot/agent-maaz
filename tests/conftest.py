@@ -43,9 +43,12 @@ def fake_openai_key(monkeypatch):
 
 @pytest.fixture
 def test_client_factory(monkeypatch):
-    """Returns a builder that reloads the FastAPI app for auth tests."""
+    """Returns a builder that reloads the FastAPI app for auth/ratelimit tests.
+    Also mocks router.chat to avoid real LLM calls.
+    """
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-v1-test-fake-key-for-tests-only")
 
-    def _build(require_auth: bool, token: str = ""):
+    def _build(require_auth: bool = False, token: str = ""):
         if require_auth:
             monkeypatch.setenv("REQUIRE_AUTH", "true")
             if token:
@@ -54,11 +57,19 @@ def test_client_factory(monkeypatch):
             monkeypatch.delenv("REQUIRE_AUTH", raising=False)
             monkeypatch.delenv("AGENT_MAAZ_BEARER_TOKEN", raising=False)
         import sys
-        for mod in ("apps.api.server", "apps.api.auth"):
+        for mod in (
+            "apps.api.server",
+            "apps.api.auth",
+            "apps.api.ratelimit",
+        ):
             if mod in sys.modules:
                 del sys.modules[mod]
         from apps.api import server
         server.router.SESSIONS.clear()
+        monkeypatch.setattr(
+            server.router, "chat",
+            lambda sid, msg, model=None: "mocked reply",
+        )
         return server.app
 
     return _build

@@ -10,7 +10,7 @@ from pydantic import BaseModel
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from apps.core import documents, memory, router  # noqa: E402
-from apps.api import auth  # noqa: E402
+from apps.api import auth, ratelimit  # noqa: E402
 
 WEB_DIR = Path(__file__).resolve().parents[2] / "apps" / "web"
 
@@ -26,6 +26,18 @@ async def auth_middleware(request: Request, call_next):
             status_code=401,
             content={"detail": auth.error_message()},
         )
+    if ratelimit.is_enabled():
+        client_ip = request.client.host if request.client else "unknown"
+        auth_header = request.headers.get("authorization", "")
+        key = auth_header if auth_header and auth_header.lower().startswith("bearer ") else client_ip
+        allowed, current = ratelimit.check(key)
+        if not allowed:
+            response = JSONResponse(
+                status_code=429,
+                content=ratelimit.error_message(current),
+            )
+            response.headers["Retry-After"] = str(ratelimit.WINDOW_SECONDS)
+            return response
     return await call_next(request)
 
 
