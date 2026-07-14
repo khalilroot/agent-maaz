@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import os
+import sys
 import uuid
 from pathlib import Path
 from typing import Generator
 
 from dotenv import load_dotenv
 from openai import OpenAI
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from apps.core import memory  # noqa: E402
 
 load_dotenv(Path(__file__).resolve().parents[2] / ".env", override=True)
 
@@ -48,12 +52,14 @@ def chat(sid: str, user_message: str, model: str | None = None) -> str:
     client = get_client()
     messages = get_session(sid)
     messages.append({"role": "user", "content": user_message})
+    memory.save_message(sid, "user", user_message)
     response = client.chat.completions.create(
         model=model or get_primary_model(),
         messages=messages,
     )
     reply = response.choices[0].message.content or ""
     messages.append({"role": "assistant", "content": reply})
+    memory.save_message(sid, "assistant", reply)
     return reply
 
 
@@ -61,6 +67,7 @@ def chat_stream(sid: str, user_message: str, model: str | None = None) -> Genera
     client = get_client()
     messages = get_session(sid)
     messages.append({"role": "user", "content": user_message})
+    memory.save_message(sid, "user", user_message)
     stream = client.chat.completions.create(
         model=model or get_primary_model(),
         messages=messages,
@@ -73,6 +80,7 @@ def chat_stream(sid: str, user_message: str, model: str | None = None) -> Genera
             full_reply += delta
             yield delta
     messages.append({"role": "assistant", "content": full_reply})
+    memory.save_message(sid, "assistant", full_reply)
 
 
 def reset_session(sid: str) -> None:
