@@ -58,7 +58,62 @@ function escapeHtml(s) {
   return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-async function probe() {
+async function loadSessions() {
+  const listEl = document.getElementById("session-list");
+  listEl.innerHTML = "";
+  try {
+    const r = await fetch("/sessions/all");
+    const data = await r.json();
+    const sessions = data.sessions || [];
+    if (sessions.length === 0) {
+      listEl.innerHTML = '<div style="color:var(--fg-mute);font-size:13px;padding:8px;">no sessions yet</div>';
+      return;
+    }
+    for (const s of sessions) {
+      const item = document.createElement("div");
+      item.className = "session-item" + (s.sid === state.sid ? " active" : "");
+      const ts = new Date(s.started_at * 1000).toLocaleString();
+      item.innerHTML = `<div>${s.sid.slice(0, 8)}</div><div class="ts">${ts} · ${s.turns} turns</div>`;
+      item.addEventListener("click", () => loadSession(s.sid));
+      listEl.appendChild(item);
+    }
+  } catch (e) {
+    listEl.innerHTML = `<div style="color:var(--fg-mute);font-size:13px;padding:8px;">error: ${e.message}</div>`;
+  }
+}
+
+async function loadSession(sid) {
+  try {
+    const r = await fetch(`/sessions/${sid}/messages`);
+    const data = await r.json();
+    if (!data.messages || data.messages.length === 0) return;
+    state.sid = sid;
+    document.getElementById("messages").innerHTML = "";
+    for (const m of data.messages) {
+      if (m.role === "system") continue;
+      addMessage(m.role === "user" ? "user" : "assistant", m.content);
+    }
+    await loadSessions();
+    inputEl.focus();
+  } catch (e) {
+    log.write(`\n[red]error: {e}[/]`);
+  }
+}
+
+document.getElementById("refresh-sessions").addEventListener("click", loadSessions);
+
+document.getElementById("toggle-sidebar").addEventListener("click", () => {
+  const sb = document.getElementById("sidebar");
+  const isHidden = sb.hasAttribute("hidden");
+  if (isHidden) {
+    sb.removeAttribute("hidden");
+    document.getElementById("app").classList.add("with-sidebar");
+    loadSessions();
+  } else {
+    sb.setAttribute("hidden", "");
+    document.getElementById("app").classList.remove("with-sidebar");
+  }
+});
   try {
     const r = await fetch("/health");
     const h = await r.json();

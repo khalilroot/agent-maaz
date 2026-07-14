@@ -8,22 +8,32 @@
 </head>
 <body>
 <div id="app">
-  <header>
-    <div class="brand">
-      <span class="dot"></span>
-      <h1>agent-maaz</h1>
-      <span class="sub">free · open source · <span id="model">checking…</span></span>
+  <aside id="sidebar" hidden>
+    <div class="side-header">
+      <h2>sessions</h2>
+      <button id="refresh-sessions" title="refresh">↻</button>
     </div>
-    <div class="actions">
-      <button id="new-chat" title="new conversation">+ new</button>
-      <button id="mic" title="voice input (browser speech recognition)" style="background:none;border:none;color:var(--accent);font-size:18px;cursor:pointer;padding:6px 10px;">🎤</button>
-      <button id="toggle-tools" title="toggle autonomous tools">⚙ tools: on</button>
-    </div>
-  </header>
-  <main id="messages" aria-live="polite"></main>
-  <footer>
-    <textarea id="input" rows="1" placeholder="اكتب رسالتك… (Enter للإرسال، Shift+Enter لسطر جديد)" autofocus></textarea>
-  </footer>
+    <div id="session-list"></div>
+  </aside>
+  <main>
+    <header>
+      <div class="brand">
+        <button id="toggle-sidebar" title="toggle sessions" class="ghost">☰</button>
+        <span class="dot"></span>
+        <h1>agent-maaz</h1>
+        <span class="sub">free · open source · <span id="model">checking…</span></span>
+      </div>
+      <div class="actions">
+        <button id="new-chat" title="new conversation">+ new</button>
+        <button id="mic" title="voice input (browser speech recognition)">🎤</button>
+        <button id="toggle-tools" title="toggle autonomous tools">⚙ tools: on</button>
+      </div>
+    </header>
+    <main id="messages" aria-live="polite"></main>
+    <footer>
+      <textarea id="input" rows="1" placeholder="اكتب رسالتك… (Enter للإرسال، Shift+Enter لسطر جديد)" autofocus></textarea>
+    </footer>
+  </main>
 </div>
 <script src="/static/app.js"></script>
 </body>

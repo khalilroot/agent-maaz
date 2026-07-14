@@ -25,10 +25,70 @@ body {
   display: flex;
   flex-direction: column;
   height: 100vh;
-  max-width: 880px;
+  max-width: 1100px;
   margin: 0 auto;
   padding: 0 16px;
 }
+
+#sidebar {
+  width: 220px;
+  border-right: 1px solid var(--border);
+  padding: 14px 12px;
+  overflow-y: auto;
+  background: var(--bg-elev);
+  position: fixed;
+  top: 0; bottom: 0; left: 0;
+  z-index: 10;
+}
+#sidebar[hidden] { display: none; }
+.side-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.side-header h2 { margin: 0; font-size: 13px; font-weight: 600; color: var(--fg-mute); letter-spacing: 0.04em; text-transform: uppercase; }
+.side-header button { background:none;border:none;color:var(--fg-mute);font-size:14px;cursor:pointer;padding:4px 8px; }
+.side-header button:hover { color: var(--fg); }
+#session-list { display: flex; flex-direction: column; gap: 4px; padding-top: 10px; }
+.session-item {
+  padding: 8px 10px;
+  background: var(--bg-input);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--fg);
+}
+.session-item:hover { border-color: var(--border); }
+.session-item.active { border-color: var(--accent); background: rgba(109, 165, 255, 0.1); }
+.session-item .ts { color: var(--fg-mute); font-size: 11px; margin-top: 2px; }
+.session-item .preview { color: var(--fg-mute); font-size: 12px; margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.ghost { background: transparent; border: none; color: var(--fg-mute); padding: 4px 8px; cursor: pointer; font-size: 18px; }
+.ghost:hover { color: var(--fg); }
+
+#app > main {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  margin-left: 0;
+  transition: margin-left 0.2s ease;
+}
+#app.with-sidebar > main { margin-left: 240px; }
+
+.brand { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.brand h1 { margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -0.01em; }
+.brand .sub { color: var(--fg-mute); font-size: 12px; }
+.brand .dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--accent-2);
+  display: inline-block;
+  align-self: center;
+  box-shadow: 0 0 12px var(--accent-2);
+}
+#model { color: var(--accent); }
 
 header {
   display: flex;
