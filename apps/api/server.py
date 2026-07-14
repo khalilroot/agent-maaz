@@ -159,8 +159,37 @@ def documents_ingest(req: DocumentIngestRequest) -> dict:
 
 @app.post("/documents/ingest_file")
 def documents_ingest_file(path: str) -> dict:
-    """Ingest a file from disk by path. Server must have read access."""
-    return documents.ingest_file(path)
+    """Ingest a file from disk by path. Supports .txt/.md/.pdf (server must have read access)."""
+    try:
+        return documents.ingest_file(path)
+    except FileNotFoundError as e:
+        return JSONResponse(status_code=404, content={"detail": str(e)})
+
+
+@app.post("/documents/ingest_upload")
+async def documents_ingest_upload(file: bytes = ...) -> dict:
+    """Ingest raw bytes (e.g. from Web UI file upload). Filename via header."""
+    from fastapi import Request
+    raise NotImplementedError("use /documents/ingest_file with file path, or ingest_text directly")
+
+
+@app.get("/chat/history/{sid}")
+def chat_history_export(sid: str, fmt: str = "markdown") -> dict:
+    """Export a conversation as markdown or json."""
+    rows = memory.get_messages(sid)
+    if not rows:
+        return JSONResponse(status_code=404, content={"detail": "session not found"})
+    if fmt == "json":
+        return {"sid": sid, "messages": rows}
+    parts = [f"# Session {sid[:8]}\n"]
+    for r in rows:
+        role = r["role"].upper()
+        content = r["content"]
+        if role == "ASSISTANT":
+            parts.append(f"### {role}\n\n{content}\n")
+        else:
+            parts.append(f"**{role}**: {content}\n\n---\n")
+    return {"sid": sid, "format": "markdown", "body": "".join(parts)}
 
 
 @app.get("/documents")

@@ -96,8 +96,27 @@ def ingest_file(path: str) -> dict:
     p = Path(path)
     if not p.exists():
         raise FileNotFoundError(f"file not found: {p}")
-    text = p.read_text(encoding="utf-8", errors="replace")
+    suffix = p.suffix.lower()
+    if suffix == ".pdf":
+        text = _read_pdf(p)
+    else:
+        text = p.read_text(encoding="utf-8", errors="replace")
     return ingest_text(name=p.name, source=str(p), text=text)
+
+
+def _read_pdf(path: "Path") -> str:
+    try:
+        from pypdf import PdfReader
+    except ImportError as e:
+        raise RuntimeError("pypdf not installed — run: pip install pypdf") from e
+    reader = PdfReader(str(path))
+    parts: list[str] = []
+    for page in reader.pages:
+        try:
+            parts.append(page.extract_text() or "")
+        except Exception:
+            parts.append("")
+    return "\n\n".join(parts)
 
 
 def list_documents() -> list[dict]:
