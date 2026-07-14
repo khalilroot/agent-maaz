@@ -9,11 +9,6 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
 
-@pytest.fixture(autouse=True)
-def bootstrap():
-    from eval_type_backport import eval_type_backport  # noqa: F401
-
-
 @pytest.fixture
 def mock_router_chat(monkeypatch):
     import importlib

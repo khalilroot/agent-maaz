@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from apps.core import memory, router  # noqa: E402
+from apps.core import documents, memory, router  # noqa: E402
 
 WEB_DIR = Path(__file__).resolve().parents[2] / "apps" / "web"
 
@@ -35,6 +35,22 @@ class ToolsChatRequest(BaseModel):
     model: str | None = None
     system: str | None = None
     max_iterations: int = 5
+
+
+class DocumentIngestRequest(BaseModel):
+    name: str
+    source: str = ""
+    content: str
+
+
+class RagChatRequest(BaseModel):
+    sid: str | None = None
+    message: str
+    doc_ids: list[int] | None = None
+    model: str | None = None
+    system: str | None = None
+    max_iterations: int = 5
+    top_k: int = 3
 
 
 @app.get("/health")
@@ -80,6 +96,60 @@ def chat_tools(req: ToolsChatRequest) -> dict:
 def list_tools() -> dict:
     """List tools registered for LLM-driven use."""
     return {"tools": router.TOOLS}
+
+
+@app.post("/chat/rag")
+def chat_rag(req: RagChatRequest) -> dict:
+    """RAG-augmented chat: searches local documents before LLM call."""
+    sid = req.sid
+    if not sid:
+        sid = router.new_session(system=req.system)
+    elif router.get_session(sid)[0].get("role") != "system" and req.system:
+        router.get_session(sid).insert(0, {"role": "system", "content": req.system})
+    reply, tool_log, rag_context = router.chat_with_rag(
+        sid,
+        req.message,
+        doc_ids=req.doc_ids,
+        model=req.model,
+        max_iterations=req.max_iterations,
+        top_k=req.top_k,
+    )
+    return {
+        "sid": sid,
+        "reply": reply,
+        "tool_log": tool_log,
+        "rag_context_chars": len(rag_context),
+    }
+
+
+@app.post("/documents/ingest")
+def documents_ingest(req: DocumentIngestRequest) -> dict:
+    """Ingest a document (text) — chunks it and stores in SQLite."""
+    return documents.ingest_text(
+        name=req.name, source=req.source or "api", text=req.content
+    )
+
+
+@app.post("/documents/ingest_file")
+def documents_ingest_file(path: str) -> dict:
+    """Ingest a file from disk by path. Server must have read access."""
+    return documents.ingest_file(path)
+
+
+@app.get("/documents")
+def documents_list() -> dict:
+    return {"documents": documents.list_documents(), "count": documents.get_doc_count()}
+
+
+@app.delete("/documents/{doc_id}")
+def documents_delete(doc_id: int) -> dict:
+    deleted = documents.delete_document(doc_id)
+    return {"deleted": deleted, "doc_id": doc_id}
+
+
+@app.get("/documents/search")
+def documents_search(q: str, limit: int = 5) -> dict:
+    return {"query": q, "matches": documents.search_chunks(q, limit=limit)}
 
 
 @app.get("/sessions")

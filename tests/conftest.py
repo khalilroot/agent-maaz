@@ -11,6 +11,11 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
 
+@pytest.fixture(autouse=True)
+def bootstrap_py39_backports():
+    from eval_type_backport import eval_type_backport  # noqa: F401
+
+
 @pytest.fixture
 def temp_db(tmp_path, monkeypatch):
     db_path = tmp_path / "agent-maaz-test.db"
@@ -18,6 +23,15 @@ def temp_db(tmp_path, monkeypatch):
     from apps.core import memory
     memory.init_db()
     return db_path
+
+
+@pytest.fixture
+def doc_db(tmp_path, monkeypatch):
+    db = tmp_path / "docs-test.db"
+    monkeypatch.setattr("apps.core.documents.DOC_DB_PATH", db)
+    from apps.core import documents
+    documents.init_db()
+    return db
 
 
 @pytest.fixture

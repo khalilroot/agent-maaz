@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 from openai import OpenAI
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from apps.core import memory  # noqa: E402
+from apps.core import documents, memory  # noqa: E402
 
 load_dotenv(Path(__file__).resolve().parents[2] / ".env", override=True)
 
@@ -238,6 +238,41 @@ def chat_with_tools(
             continue
 
     raise RuntimeError(f"all fallback models failed, last error: {last_err}")
+
+
+def chat_with_rag(
+    sid: str,
+    user_message: str,
+    doc_ids: list[int] | None = None,
+    model: str | None = None,
+    max_iterations: int = 5,
+    top_k: int = 3,
+) -> tuple[str, list[dict], str]:
+    """RAG-augmented chat. Returns (final_reply, tool_log, rag_context_used).
+
+    Searches local documents (LIKE match) before sending to the LLM. If
+    relevant chunks exist, prepends them as context. The LLM still has tool
+    access for browser_search when external info is needed.
+    """
+    rag_results = documents.search_chunks(user_message, limit=top_k, doc_ids=doc_ids)
+    rag_context = documents.format_rag_context(rag_results)
+
+    augmented = user_message
+    if rag_context:
+        augmented = (
+            "اعتمد على السياق التالي من المستندات المحلية للإجابة. "
+            "اذا السياق مش كافي، استخدم browser_search.\n\n"
+            f"=== السياق ===\n{rag_context}\n=== نهاية السياق ===\n\n"
+            f"سؤال المستخدم: {user_message}"
+        )
+
+    reply, tool_log = chat_with_tools(
+        sid,
+        augmented,
+        model=model,
+        max_iterations=max_iterations,
+    )
+    return reply, tool_log, rag_context
 
 
 def reset_session(sid: str) -> None:
