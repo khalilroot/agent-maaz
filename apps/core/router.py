@@ -12,6 +12,7 @@ from openai import OpenAI
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from apps.core import documents, memory  # noqa: E402
+from apps import skills  # noqa: E402
 
 load_dotenv(Path(__file__).resolve().parents[2] / ".env", override=True)
 
@@ -195,6 +196,19 @@ def get_session(sid: str) -> list[dict]:
     if sid not in SESSIONS:
         raise KeyError(f"session {sid} not found")
     return SESSIONS[sid]
+
+
+def _active_system_prompt(user_message: str, base: str) -> str:
+    """Compose system prompt: user's base + relevant Skills instructions.
+
+    Skills are matched on the user's message text (triggers + keywords).
+    Inactive skills are NOT included — saves tokens.
+    """
+    sections = [base] if base else []
+    section = skills.format_for_prompt(skills.select_relevant(user_message, top_k=2))
+    if section:
+        sections.append(section)
+    return "\n\n".join(sections)
 
 
 def _call_model(client: OpenAI, model: str, messages: list[dict], stream: bool, tools: list[dict] | None = None):
